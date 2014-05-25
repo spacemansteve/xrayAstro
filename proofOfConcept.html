@@ -1,0 +1,176 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>X-rayAstro</title>
+<script src="js/fits.js" type="text/javascript" charset="utf-8"></script>
+<script src="js/d3.js" type="text/javascript" charset="utf-8"></script>
+<script src="js/dc.js" type="text/javascript" charset="utf-8"></script>
+<script src="js/crossfilter.js" type="text/javascript" charset="utf-8"></script>
+<script src="//code.jquery.com/jquery-1.11.0.min.js"></script>
+<link rel="stylesheet" type="text/css" href="css/dc.css">
+ 
+<script>
+
+var startTime = Date.now();
+var filename = "acisf01444N004_evt2.fits";
+jQuery("#loadInfo").text("requesting file from server: " + filename);
+console.log("loading file");
+// we load the fits file and process data in callback handler
+var fitsFile = new astro.FITS(filename, fileLoadedHandler);
+
+// in file loaded callback we retrieve photon events
+// and create lightcurve, low resolution spectrum and image
+function fileLoadedHandler(arg)
+{
+  jQuery("#loadInfo").text("file loaded: " + filename);
+  var hdus1 = arg.hdus[1];  // events are in the first data unit
+  var data1 = hdus1.data;
+  console.log("loaded: " + data1.rows);
+  
+  // the parsed fits file contains:
+  //["time", "ccd_id", "node_id", "expno", "chipx", "chipy", "tdetx", "tdety", "detx", "dety", 
+  // "x", "y", "pha", "pha_ro", "energy", "pi", "fltgrade", "grade", "status"]
+
+  // we create an array of hashtables for crossfilter
+  // each hashtable holds a single event/photon
+  var events = []
+  var startTimestamp;  
+
+  // use the fits library to obtain the photon event data 
+  //   pass the row number to retrieve and callback function to repackage the data
+  // for each event we create a hashtable with keys timestamp, skyX, skyY and energy
+  //   the timestamp is made relative to the start of the observation
+  // the fits library seems to only support getting one row at a time
+  var maxRows = Math.floor(data1.rows * .10);  // reduce data set for faster testing
+  for (var i = 1 ; i < maxRows ; i=i+1)
+  {
+	  data1.getRows(i, 1, function(rows) 
+		{
+		    var row = rows[0];
+		    if (i == 1) startTimestamp = row.time; 
+	   		timestamp = row.time;
+	   		skyX = row.x;
+	   		skyY = row.y;
+	   		pi = row.pi;
+	   		event = {timestamp: (timestamp - startTimestamp), skyX: skyX, skyY: skyY, energy: pi};
+	   		events.push(event);
+	   		if (i == 1) first = event;
+	   		if (i == (maxRows - 1)) last = event;
+		});
+  }
+  
+  console.log("loop done");
+  endLoadTime = Date.now();
+  deltaTime = endLoadTime - startTime;
+  jQuery("#loadInfo").text("file " + filename + " loaded");
+  console.log("time to add records" + (deltaTime/1000.));
+
+  // now we use crossfilter and dc/d3 to display lightcurve, spectrum and image
+  //   from the event/photon data in a single observation 
+  crossfilterData = crossfilter();
+  crossfilterData.add(events);
+  lightcurveChart = dc.barChart("#lightcurveChart");
+  spectrumChart = dc.barChart("#spectrumChart");
+  imageChart = dc.heatMap("#imageChart"); 
+  // we only use the center part of the ACIS CCD for the image
+  var skyMaxX = 5500;
+  var skyMinX = 4200;
+  var skyMaxY = 4300;
+  var skyMinY = 3000;
+
+  // create dimensions for lightcurve, spectrum and image
+  var timestampDimension = crossfilterData.dimension(function(d) 
+		  {return d.timestamp;})
+  var energyDimension = crossfilterData.dimension(function(d) 
+		  {return d.energy; });
+  var imageDimension = crossfilterData.dimension(function(d)
+		  {return [d.skyX - skyMinX, d.skyY - skyMinY]});
+    
+  // each dimension gets its own group
+  var timestampGroup = timestampDimension.group();
+  var energyGroup = energyDimension.group();
+  var imageGroup = imageDimension.group().reduceSum(function(d) { return +d.energy; });
+  //imageGroup = imageDimension.group().reduceCount(function(d) { return +d.energy; });
+  
+  // configure UI elements to display dimensions
+  lightcurveChart.width(420)
+   .height(180)
+   .margins({top: 10, right: 50, bottom: 30, left: 40})
+   .dimension(timestampDimension)
+   .group(timestampGroup)
+   .elasticY(true)
+   .centerBar(true)
+   .gap(1)
+   .round(dc.round.floor)
+   .alwaysUseRounding(true)
+   .x(d3.scale.linear().domain([first.timestamp, last.timestamp]))
+   .renderHorizontalGridLines(true)
+   .xAxisLabel("Lightcurve");
+
+  spectrumChart.width(420)
+   .height(180)
+   .margins({top: 10, right: 50, bottom: 30, left: 40})
+   .dimension(energyDimension)
+   .group(energyGroup)
+   .elasticY(true)
+   .centerBar(true)
+   .gap(1)
+   .round(dc.round.floor)
+   .alwaysUseRounding(true)
+   .x(d3.scale.linear().domain([0,1024]))
+   .renderHorizontalGridLines(true)
+   .xAxisLabel("Spectrum (energy in PI)");
+  
+  imageChart
+   .width(parseInt(skyMaxX - skyMinX))
+   .height(parseInt(skyMaxY - skyMinY))
+   .dimension(imageDimension)
+   .group(imageGroup)
+   .keyAccessor(function(d) { return parseInt(+d.key[0]); })
+   .valueAccessor(function(d) { return parseInt(+d.key[1]); })
+   .colorAccessor(function(d) { return parseInt(+d.value);})
+   .calculateColorDomain();
+  
+  dc.renderAll();
+}
+</script>
+
+</head>
+<body>
+<p>
+This page demonstrates client side JavaScript processing of data from the
+<a href="http://chandra.harvard.edu/about/science_instruments.html">Chandra telescope</a> .
+A <a href="http://fits.gsfc.nasa.gov/fits_primer.html">FITS formatted file</a> 
+is parsed in the browser.  From the photon events,  
+we create and display a spectrum, lightcurve and image.  
+All the parsing and display only requires about 100 lines of JavaScript application code.  
+It uses several JavaScript libraries including 
+<a href="https://github.com/astrojs/fitsjs">fits.js</a>, 
+<a href="http://square.github.io/crossfilter/">crossfilter</a>, 
+<a href="http://www.d3noob.org/2013/07/introduction-to-dcjs.html">dc</a>
+and <a href="http://d3js.org/">d3</a>.
+</p>
+<p>
+This example is hard-coded to only use 10% of the photons from a Chandra observation
+   of Cas A, a supernova remnant. 
+   Specifically, it loads acisf01444N004_evt2.fits, a 12MB file.  
+   The brightness of the supernova remnant does not change 
+   with time, so the lightcurve is pretty constant.  The spectrum shows more lower energy 
+   photons.  That is both a feature of the supernova remnant and the detector being more 
+   sensitive to lower energy photons.  The image is faint because only 10% of the photons 
+   are included.  All data should display shortly after the page has loaded.  
+</p>
+<p>
+To see the code, just view page source.
+Please send your thoughts, comments and suggestions to SpacemanSteve@gmail.com.
+</p>
+<br/>
+<div id="loadInfo"></div>
+<br/>
+<div id="lightcurveChart"></div>
+<div id="spectrumChart"></div>
+<br/>
+<div id="imageChart"></div>
+</body>
+</html>
