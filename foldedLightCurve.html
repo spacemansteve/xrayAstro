@@ -1,0 +1,80 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>X-rayAstroFLC</title>
+<script src="js/fits.js" type="text/javascript" charset="utf-8"></script>
+<script src="js/d3.js" type="text/javascript" charset="utf-8"></script>
+<script src="js/dc.js" type="text/javascript" charset="utf-8"></script>
+<script src="js/crossfilter.js" type="text/javascript" charset="utf-8"></script>
+<script src="js/jquery-1.11.0.min.js"></script>
+<script src="js/xrayAstro.js"></script>
+<link rel="stylesheet" type="text/css" href="css/dc.css">
+ 
+<script>
+
+function addLightcurve(events)
+{
+  crossfilterData = crossfilter();
+  crossfilterData.add(events);
+  var timestampDimension = crossfilterData.dimension(function(d) 
+		  {return Math.floor(d.timestamp % 104.);})
+  lightcurveChart = dc.barChart("#lightcurveChart");
+  dc.barChart("#lightcurveChart");
+  var timestampGroup = timestampDimension.group();
+  
+  // configure UI elements to display dimensions
+  lightcurveChart.width(420)
+   .height(180)
+   .margins({top: 10, right: 50, bottom: 30, left: 40})
+   .dimension(timestampDimension)
+   .group(timestampGroup)
+   .elasticY(true)
+   .centerBar(true)
+   .gap(1)
+   .round(dc.round.floor)
+   .alwaysUseRounding(true)
+   .x(d3.scale.linear().domain([0, 103]))
+   .renderHorizontalGridLines(true)
+   .xAxisLabel("Lightcurve");
+
+//   .x(d3.scale.linear().domain([first.timestamp, last.timestamp]))
+  dc.renderAll();
+}
+
+var startTime = Date.now();
+var filename = "acisf08242N002_evt2.fits";
+var crossfilterData = loadFile(filename, addLightcurve);
+
+
+</script>
+
+</head>
+<body>
+<p>
+This page demonstrates client side JavaScript processing of data from the
+<a href="http://chandra.harvard.edu/about/science_instruments.html">Chandra telescope</a> .
+A <a href="http://fits.gsfc.nasa.gov/fits_primer.html">FITS formatted file</a> 
+is parsed in the browser.  From the photon events,  
+we create and display a folded lightcurve.
+It uses several JavaScript libraries including 
+<a href="https://github.com/astrojs/fitsjs">fits.js</a>, 
+<a href="http://square.github.io/crossfilter/">crossfilter</a>, 
+<a href="http://www.d3noob.org/2013/07/introduction-to-dcjs.html">dc</a>
+and <a href="http://d3js.org/">d3</a>.
+</p>
+<p>
+This example is hard-coded to only use 10% of the photons from a Chandra observation
+   of TAU 725
+   Specifically, it loads acisf08242N002_evt2.fits, a 30MB file.  
+</p>
+<p>
+To see the code, just view page source.
+Please send your thoughts, comments and suggestions to SpacemanSteve@gmail.com.
+</p>
+<br/>
+<div id="loadInfo"></div>
+<br/>
+<div id="lightcurveChart"></div>
+</body>
+</html>
