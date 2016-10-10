@@ -23,6 +23,8 @@ too shortly) after the page has loaded.
 
 The site is [available
 here](http://spacemansteve.github.io/xrayAstro/proofOfConcept.html).
+The [project wiki](https://github.com/spacemansteve/xrayAstro/wiki)
+has some words on the project's vision.
 
 To run the project on localhost the project includes Connect and
 node.js.  To start the web server, 
